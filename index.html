@@ -228,68 +228,69 @@
       }
 
       function renderTable(sheet, sheetName, fileName) {
-        const range = XLSX.utils.decode_range(sheet["!ref"]);
-        const merges = sheet["!merges"] || [];
-        const mergeMap = {};
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  const merges = sheet["!merges"] || [];
+  const mergeMap = {};
 
-        merges.forEach((m) => {
-          for (let r = m.s.r; r <= m.e.r; r++) {
-            for (let c = m.s.c; c <= m.e.c; c++) {
-              const key = `${r}:${c}`;
-              mergeMap[key] = { master: r === m.s.r && c === m.s.c, range: m };
-            }
-          }
-        });
-
-        thead.innerHTML = "";
-        tbody.innerHTML = "";
-
-        // Render header row in tbody
-        const headerRow = document.createElement("tr");
-        headerRow.id = "table-header-row"; // Add an ID to easily select it later
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
-          let cell = sheet[cellAddress];
-          const td = document.createElement("td");
-          td.textContent = cell ? formatCell(cell) : `Column ${C + 1}`;
-          td.style.fontWeight = "bold";
-          headerRow.appendChild(td);
-        }
-        tbody.appendChild(headerRow);
-
-        // Render data rows in tbody
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-          const tr = document.createElement("tr");
-          for (let C = range.s.c; C <= range.e.c; ++C) {
-            const key = `${R}:${C}`;
-            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-            let cell = sheet[cellAddress];
-            if (mergeMap[key] && !mergeMap[key].master) {
-              continue;
-            }
-            const td = document.createElement("td");
-            if (cell) {
-              td.textContent = formatCell(cell);
-              applyCellStyle(td, cell);
-            }
-            if (mergeMap[key]) {
-              const m = mergeMap[key].range;
-              const rowspan = m.e.r - m.s.r + 1;
-              const colspan = m.e.c - m.s.c + 1;
-              if (rowspan > 1) td.rowSpan = rowspan;
-              if (colspan > 1) td.colSpan = colspan;
-            }
-            tr.appendChild(td);
-          }
-          tbody.appendChild(tr);
-        }
-
-        previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
-        previewContainer.classList.remove("d-none");
-        searchInput.classList.remove("d-none");
-        searchInput.value = "";
-        autoFitColumns();
+  merges.forEach((m) => {
+    for (let r = m.s.r; r <= m.e.r; r++) {
+      for (let c = m.s.c; c <= m.e.c; c++) {
+        const key = `${r}:${c}`;
+        mergeMap[key] = { master: r === m.s.r && c === m.s.c, range: m };
       }
+    }
+  });
+
+  thead.innerHTML = "";
+  tbody.innerHTML = "";
+
+  // Render header row in tbody
+  const headerRow = document.createElement("tr");
+  headerRow.id = "table-header-row";
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+    let cell = sheet[cellAddress];
+    const td = document.createElement("td");
+    // Change this line to set an empty string instead of "Column X"
+    td.textContent = cell ? formatCell(cell) : ""; 
+    td.style.fontWeight = "bold";
+    headerRow.appendChild(td);
+  }
+  tbody.appendChild(headerRow);
+
+  // Render data rows in tbody
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    const tr = document.createElement("tr");
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const key = `${R}:${C}`;
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      let cell = sheet[cellAddress];
+      if (mergeMap[key] && !mergeMap[key].master) {
+        continue;
+      }
+      const td = document.createElement("td");
+      if (cell) {
+        td.textContent = formatCell(cell);
+        applyCellStyle(td, cell);
+      }
+      if (mergeMap[key]) {
+        const m = mergeMap[key].range;
+        const rowspan = m.e.r - m.s.r + 1;
+        const colspan = m.e.c - m.s.c + 1;
+        if (rowspan > 1) td.rowSpan = rowspan;
+        if (colspan > 1) td.colSpan = colspan;
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
+  previewContainer.classList.remove("d-none");
+  searchInput.classList.remove("d-none");
+  searchInput.value = "";
+  autoFitColumns();
+}
 
       function formatCell(cell) {
         if (!cell) return "";

@@ -85,7 +85,7 @@
 <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap4.min.js"></script>
 <script>
     let dataTable = null;
-    let workbook = null;
+    let workbook = null; // Store the entire workbook
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('fileInput');
     const loadingSpinner = document.getElementById('loading-spinner');
@@ -130,6 +130,7 @@
         const file = files[0];
         if (!file) return;
 
+        // Check file type
         const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
         if (!okExt) {
             showFeedback('Please upload an Excel or CSV file.', 'danger');
@@ -141,10 +142,13 @@
 
         try {
             const data = await file.arrayBuffer();
+            // Store the entire workbook object
             workbook = XLSX.read(data, { type: 'array' });
             
             if (workbook.SheetNames.length > 0) {
+                // Display sheet tabs
                 renderSheetTabs(workbook.SheetNames);
+                // Render the first sheet by default
                 renderDataTable(workbook.Sheets[workbook.SheetNames[0]], workbook.SheetNames[0], file.name);
                 showFeedback('File parsed successfully. Select a sheet to view.', 'success');
             } else {
@@ -161,7 +165,7 @@
     }
 
     function renderSheetTabs(sheetNames) {
-        sheetTabs.innerHTML = '';
+        sheetTabs.innerHTML = ''; // Clear previous tabs
         sheetTabs.classList.remove('d-none');
 
         sheetNames.forEach((sheetName, index) => {
@@ -170,7 +174,7 @@
             const a = document.createElement('a');
             a.className = 'nav-link';
             if (index === 0) {
-                a.classList.add('active'); 
+                a.classList.add('active'); // Activate the first tab by default
             }
             a.href = '#';
             a.textContent = sheetName;
@@ -178,11 +182,14 @@
 
             a.addEventListener('click', (e) => {
                 e.preventDefault();
+                // Deactivate all tabs
                 document.querySelectorAll('#sheetTabs .nav-link').forEach(link => {
                     link.classList.remove('active');
                 });
+                // Activate clicked tab
                 e.target.classList.add('active');
                 
+                // Render data for the selected sheet
                 const selectedSheet = workbook.Sheets[e.target.dataset.sheetName];
                 renderDataTable(selectedSheet, e.target.dataset.sheetName, previewFileName.textContent.replace('File: ', ''));
             });
@@ -218,15 +225,25 @@
     }
 
     function renderDataTable(sheet, sheetName, fileName) {
-        const parsedRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-        if (!parsedRows.length) {
+        // Use sheet_to_json with raw data to get numbers and formatting
+        const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true });
+        
+        if (!rawRows.length) {
             hidePreview();
             return;
         }
-        
-        const cols = Object.keys(parsedRows[0]).map(c => ({ title: c }));
-        const data = parsedRows.map(row => Object.values(row));
+
+        const cols = Object.keys(rawRows[0]).map(c => ({ title: c }));
+        const data = rawRows.map(rawRow => {
+            return Object.values(rawRow).map(cell => {
+                // Check if the cell has a format and is a number (a date/datetime)
+                if (cell && cell.t === 'n' && (cell.z || XLSX.SSF.is_date(cell.v))) {
+                    return XLSX.SSF.format(cell.z, cell.v);
+                }
+                // Return the raw value for other types
+                return cell.v;
+            });
+        });
 
         if (dataTable) {
             dataTable.destroy();

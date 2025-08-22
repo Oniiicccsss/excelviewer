@@ -44,16 +44,18 @@
       }
 
       #previewTable {
-        /* This keeps the table layout as it would appear in Excel */
-        table-layout: fixed;
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      #previewTable td {
-        white-space: nowrap;
-        padding: 6px 10px;
-      }
+	      table-layout: auto; /* Allows the table to size columns automatically */
+	      width: 100%;
+	      max-width: 100%; /* Ensures the table doesn't exceed its container */
+	      border-collapse: collapse;
+	  }
+	  
+	  #previewTable td {
+	      white-space: normal; /* This is the key for enabling word wrap */
+	      padding: 6px 10px;
+	      word-wrap: break-word; /* Prevents long words from overflowing */
+	      max-width: 250px; /* Adjust this value as needed to limit cell width */
+	  }
     </style>
   </head>
   <body class="bg-light p-4">
@@ -244,7 +246,6 @@
         thead.innerHTML = "";
         tbody.innerHTML = "";
 
-        // Render header row in tbody
         const headerRow = document.createElement("tr");
         headerRow.id = "table-header-row";
         for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -253,12 +254,11 @@
           const td = document.createElement("td");
           td.textContent = cell ? formatCell(cell) : "";
           td.style.fontWeight = "bold";
-          applyCellStyle(td, cell); // Apply style to header cells
+          applyCellStyle(td, cell);
           headerRow.appendChild(td);
         }
         tbody.appendChild(headerRow);
 
-        // Render data rows in tbody
         for (let R = range.s.r + 1; R <= range.e.r; ++R) {
           const tr = document.createElement("tr");
           for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -284,13 +284,13 @@
           }
           tbody.appendChild(tr);
         }
-        // Set column widths based on the Excel file's `!cols` property
+
+        // Keep this to apply widths, but they won't force no-wrap
         if (sheet['!cols']) {
           const style = document.createElement('style');
           let colStyles = '';
           sheet['!cols'].forEach((col, index) => {
             if (col.wpx) {
-              // Set the width in pixels if it exists in the Excel data
               colStyles += `#previewTable th:nth-child(${index + 1}), #previewTable td:nth-child(${index + 1}) { width: ${col.wpx}px; }`;
             }
           });

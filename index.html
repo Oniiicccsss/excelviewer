@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Excel Data Preview</title>
+    <title>Excel Data Preview by Onyx</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
@@ -32,6 +32,10 @@
             justify-content: space-between;
             align-items: center;
         }
+        #sheetTabs {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body class="bg-light p-4">
@@ -56,6 +60,8 @@
             <small class="text-muted" id="preview-file-name"></small>
         </div>
         <div class="card-body">
+            <ul class="nav nav-tabs mb-3 d-none" id="sheetTabs" role="tablist"></ul>
+            
             <div id="loading-spinner" class="text-center d-none">
                 <div class="spinner-border text-primary" role="status">
                     <span class="sr-only">Loading...</span>
@@ -79,12 +85,14 @@
 <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap4.min.js"></script>
 <script>
     let dataTable = null;
+    let workbook = null;
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('fileInput');
     const loadingSpinner = document.getElementById('loading-spinner');
     const previewContainer = document.getElementById('preview-container');
     const feedbackMessage = document.getElementById('feedback-message');
     const previewFileName = document.getElementById('preview-file-name');
+    const sheetTabs = document.getElementById('sheetTabs');
 
     // Handle drag and drop events
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -122,7 +130,6 @@
         const file = files[0];
         if (!file) return;
 
-        // Check file type
         const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
         if (!okExt) {
             showFeedback('Please upload an Excel or CSV file.', 'danger');
@@ -134,13 +141,12 @@
 
         try {
             const data = await file.arrayBuffer();
-            const wb = XLSX.read(data, { type: 'array' });
-            const sheet = wb.Sheets[wb.SheetNames[0]];
-            const parsedRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-            if (parsedRows.length > 0) {
-                renderDataTable(parsedRows, file.name);
-                showFeedback('File parsed successfully.', 'success');
+            workbook = XLSX.read(data, { type: 'array' });
+            
+            if (workbook.SheetNames.length > 0) {
+                renderSheetTabs(workbook.SheetNames);
+                renderDataTable(workbook.Sheets[workbook.SheetNames[0]], workbook.SheetNames[0], file.name);
+                showFeedback('File parsed successfully. Select a sheet to view.', 'success');
             } else {
                 showFeedback('The uploaded file is empty or could not be parsed.', 'warning');
                 hidePreview();
@@ -154,9 +160,42 @@
         }
     }
 
+    function renderSheetTabs(sheetNames) {
+        sheetTabs.innerHTML = '';
+        sheetTabs.classList.remove('d-none');
+
+        sheetNames.forEach((sheetName, index) => {
+            const li = document.createElement('li');
+            li.className = 'nav-item';
+            const a = document.createElement('a');
+            a.className = 'nav-link';
+            if (index === 0) {
+                a.classList.add('active'); 
+            }
+            a.href = '#';
+            a.textContent = sheetName;
+            a.dataset.sheetName = sheetName;
+
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('#sheetTabs .nav-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                e.target.classList.add('active');
+                
+                const selectedSheet = workbook.Sheets[e.target.dataset.sheetName];
+                renderDataTable(selectedSheet, e.target.dataset.sheetName, previewFileName.textContent.replace('File: ', ''));
+            });
+
+            li.appendChild(a);
+            sheetTabs.appendChild(li);
+        });
+    }
+
     function showLoading() {
         loadingSpinner.classList.remove('d-none');
         previewContainer.classList.add('d-none');
+        sheetTabs.classList.add('d-none');
     }
 
     function hideLoading() {
@@ -171,28 +210,30 @@
         $('#previewTable tbody').empty();
         previewContainer.classList.add('d-none');
         previewFileName.textContent = '';
+        sheetTabs.classList.add('d-none');
     }
 
     function showFeedback(message, type) {
         feedbackMessage.innerHTML = `<div class="alert alert-${type} mb-0" role="alert">${message}</div>`;
     }
 
-    function renderDataTable(rows, fileName) {
-        if (!rows.length) {
+    function renderDataTable(sheet, sheetName, fileName) {
+        const parsedRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+        if (!parsedRows.length) {
             hidePreview();
             return;
         }
         
-        // DataTables works best with a consistent data structure
-        const cols = Object.keys(rows[0]).map(c => ({ title: c }));
-        const data = rows.map(row => Object.values(row));
+        const cols = Object.keys(parsedRows[0]).map(c => ({ title: c }));
+        const data = parsedRows.map(row => Object.values(row));
 
-        // Destroy previous instance to re-initialize
         if (dataTable) {
             dataTable.destroy();
+            $('#previewTable thead').empty();
+            $('#previewTable tbody').empty();
         }
 
-        // Initialize DataTable with the new data
         dataTable = $('#previewTable').DataTable({
             data: data,
             columns: cols,
@@ -200,7 +241,7 @@
             lengthMenu: [5, 10, 25, 50, 100],
         });
         
-        previewFileName.textContent = `File: ${fileName}`;
+        previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
         previewContainer.classList.remove('d-none');
     }
 </script>

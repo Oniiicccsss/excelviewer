@@ -43,10 +43,6 @@
         overflow-x: auto;
       }
 
-      th {
-        cursor: pointer;
-      }
-
       #previewTable {
         table-layout: auto;
         width: auto;
@@ -54,9 +50,8 @@
         border-collapse: collapse;
       }
 
-      #previewTable th,
       #previewTable td {
-        white-space: nowrap; /* keep text in one line */
+        white-space: nowrap;
         padding: 6px 10px;
       }
     </style>
@@ -136,9 +131,10 @@
       const previewFileName = document.getElementById("preview-file-name");
       const sheetTabs = document.getElementById("sheetTabs");
       const searchInput = document.getElementById("searchInput");
+      const tbody = document.querySelector("#previewTable tbody");
+      const thead = document.querySelector("#previewTable thead");
 
       // Event Listeners
-      // --- Drag-drop handling
       ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
         dropZone.addEventListener(ev, (e) => {
           e.preventDefault();
@@ -149,9 +145,7 @@
         dropZone.addEventListener(ev, () => dropZone.classList.add("dragover"))
       );
       ["dragleave", "drop"].forEach((ev) =>
-        dropZone.addEventListener(ev, () =>
-          dropZone.classList.remove("dragover")
-        )
+        dropZone.addEventListener(ev, () => dropZone.classList.remove("dragover"))
       );
 
       dropZone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
@@ -160,7 +154,6 @@
       searchInput.onkeyup = () => filterTable();
 
       // Core Functions
-      // --- File Handling
       async function handleFiles(files) {
         const file = files[0];
         if (!file) return;
@@ -204,7 +197,6 @@
         }
       }
 
-      // --- Rendering Functions
       function renderSheetTabs(sheetNames, fileName) {
         sheetTabs.innerHTML = "";
         sheetTabs.classList.remove("d-none");
@@ -240,7 +232,6 @@
         const merges = sheet["!merges"] || [];
         const mergeMap = {};
 
-        // Build lookup for merged cells
         merges.forEach((m) => {
           for (let r = m.s.r; r <= m.e.r; r++) {
             for (let c = m.s.c; c <= m.e.c; c++) {
@@ -250,45 +241,37 @@
           }
         });
 
-        const thead = document.querySelector("#previewTable thead");
-        const tbody = document.querySelector("#previewTable tbody");
         thead.innerHTML = "";
         tbody.innerHTML = "";
 
-        // Header (first row in sheet)
+        // Render header row in tbody
         const headerRow = document.createElement("tr");
+        headerRow.id = "table-header-row"; // Add an ID to easily select it later
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
           let cell = sheet[cellAddress];
-
-          const th = document.createElement("th");
-          th.textContent = cell
-            ? formatCell(cell)
-            : `Column ${C + 1}`;
-          th.onclick = () => sortTable(C);
-
-          headerRow.appendChild(th);
+          const td = document.createElement("td");
+          td.textContent = cell ? formatCell(cell) : `Column ${C + 1}`;
+          td.style.fontWeight = "bold";
+          headerRow.appendChild(td);
         }
-        thead.appendChild(headerRow);
+        tbody.appendChild(headerRow);
 
-        // Body (rows after header)
+        // Render data rows in tbody
         for (let R = range.s.r + 1; R <= range.e.r; ++R) {
           const tr = document.createElement("tr");
           for (let C = range.s.c; C <= range.e.c; ++C) {
             const key = `${R}:${C}`;
             const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
             let cell = sheet[cellAddress];
-
             if (mergeMap[key] && !mergeMap[key].master) {
-              continue; // Skip covered cell
+              continue;
             }
-
             const td = document.createElement("td");
             if (cell) {
               td.textContent = formatCell(cell);
               applyCellStyle(td, cell);
             }
-
             if (mergeMap[key]) {
               const m = mergeMap[key].range;
               const rowspan = m.e.r - m.s.r + 1;
@@ -296,38 +279,28 @@
               if (rowspan > 1) td.rowSpan = rowspan;
               if (colspan > 1) td.colSpan = colspan;
             }
-
             tr.appendChild(td);
           }
           tbody.appendChild(tr);
         }
 
         previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
-
         previewContainer.classList.remove("d-none");
         searchInput.classList.remove("d-none");
         searchInput.value = "";
-
-        // Auto-adjust column widths
         autoFitColumns();
       }
 
-      // --- Table Utility Functions
       function formatCell(cell) {
         if (!cell) return "";
-
-        // Case 1: Real JS Date (when cellDates:true)
         if (cell.t === "d" && cell.v instanceof Date) {
           const d = cell.v;
-          if (d.getFullYear() <= 1900) return d.toLocaleTimeString(); // time-only
+          if (d.getFullYear() <= 1900) return d.toLocaleTimeString();
           if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0)
-            return d.toLocaleDateString(); // date-only
-          return d.toLocaleString(); // full datetime
+            return d.toLocaleDateString();
+          return d.toLocaleString();
         }
-
-        // Case 2: Numbers
         if (cell.t === "n") {
-          // Check if Excel format looks like date/time
           if (cell.z && /[ymdhs]/i.test(cell.z)) {
             const dateObj = XLSX.SSF.parse_date_code(cell.v);
             if (dateObj) {
@@ -348,47 +321,66 @@
               return jsDate.toLocaleString();
             }
           }
-          // Otherwise treat as plain number (force 2 decimals)
           return Number(cell.v).toFixed(2);
         }
-
-        // Case 3: Fallback for strings, booleans, errors
         return cell.w || cell.v || "";
       }
 
       function applyCellStyle(td, cell) {
         if (!cell || !cell.s) return;
-
-        // Font color
         if (cell.s.font && cell.s.font.color && cell.s.font.color.rgb) {
-          td.style.color = "#" + cell.s.font.color.rgb.slice(-6); // strip alpha if present
+          td.style.color = "#" + cell.s.font.color.rgb.slice(-6);
         }
-
-        // Background fill
         if (cell.s.fill && cell.s.fill.fgColor && cell.s.fill.fgColor.rgb) {
           td.style.backgroundColor = "#" + cell.s.fill.fgColor.rgb.slice(-6);
         }
-
-        // Bold / italic
         if (cell.s.font && cell.s.font.bold) td.style.fontWeight = "bold";
         if (cell.s.font && cell.s.font.italic) td.style.fontStyle = "italic";
       }
 
       function filterTable() {
-        const filter = searchInput.value.toLowerCase();
-        const trs = document.querySelectorAll("#previewTable tbody tr");
-        trs.forEach((tr) => {
-          tr.style.display = [...tr.cells].some((td) =>
+    const filter = searchInput.value.toLowerCase();
+    const tbody = document.querySelector("#previewTable tbody");
+    const rows = Array.from(tbody.rows); // This now includes all rows, including the header
+
+    let foundCount = 0;
+    rows.forEach((tr) => {
+        const isVisible = [...tr.cells].some((td) =>
             td.textContent.toLowerCase().includes(filter)
-          )
-            ? ""
-            : "none";
-        });
-      }
+        );
+        tr.style.display = isVisible ? "" : "none";
+        if (isVisible) {
+            foundCount++;
+        }
+    });
+
+    const headerRow = document.getElementById("table-header-row");
+    const noResultsRow = document.getElementById('no-results-row');
+
+    if (foundCount === 0 && filter !== "") {
+        if (!noResultsRow) {
+            const tr = document.createElement("tr");
+            tr.id = 'no-results-row';
+            const td = document.createElement("td");
+            td.colSpan = tbody.rows[0].cells.length;
+            td.textContent = "No results found.";
+            td.className = "text-center text-muted";
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        } else {
+            noResultsRow.style.display = "";
+        }
+    } else {
+        if (noResultsRow) {
+            noResultsRow.style.display = "none";
+        }
+    }
+}
 
       function sortTable(colIndex) {
         const tbody = document.querySelector("#previewTable tbody");
-        const rows = Array.from(tbody.rows);
+        const rows = Array.from(tbody.rows).slice(1);
+        const headerRow = document.getElementById("table-header-row");
         const asc = !tbody.dataset.sortAsc || tbody.dataset.sortCol != colIndex;
 
         rows.sort((a, b) =>
@@ -402,6 +394,7 @@
         if (!asc) rows.reverse();
 
         tbody.innerHTML = "";
+        tbody.appendChild(headerRow);
         rows.forEach((r) => tbody.appendChild(r));
         tbody.dataset.sortAsc = asc;
         tbody.dataset.sortCol = colIndex;
@@ -410,7 +403,6 @@
       function autoFitColumns() {
         const table = document.getElementById("previewTable");
         if (!table || !table.rows[0]) return;
-
         const colCount = table.rows[0].cells.length;
         for (let c = 0; c < colCount; c++) {
           let maxLen = 0;
@@ -421,7 +413,6 @@
               if (len > maxLen) maxLen = len;
             }
           }
-          // Rough px calculation (8px per char + padding)
           table
             .querySelectorAll(
               `tr td:nth-child(${c + 1}), tr th:nth-child(${c + 1})`
@@ -430,7 +421,6 @@
         }
       }
 
-      // UI State Management
       function showLoading() {
         loadingSpinner.classList.remove("d-none");
       }

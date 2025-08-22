@@ -44,9 +44,9 @@
       }
 
       #previewTable {
-        table-layout: auto;
-        width: auto;
-        max-width: 100%;
+        /* This keeps the table layout as it would appear in Excel */
+        table-layout: fixed;
+        width: 100%;
         border-collapse: collapse;
       }
 
@@ -228,69 +228,81 @@
       }
 
       function renderTable(sheet, sheetName, fileName) {
-  const range = XLSX.utils.decode_range(sheet["!ref"]);
-  const merges = sheet["!merges"] || [];
-  const mergeMap = {};
+        const range = XLSX.utils.decode_range(sheet["!ref"]);
+        const merges = sheet["!merges"] || [];
+        const mergeMap = {};
 
-  merges.forEach((m) => {
-    for (let r = m.s.r; r <= m.e.r; r++) {
-      for (let c = m.s.c; c <= m.e.c; c++) {
-        const key = `${r}:${c}`;
-        mergeMap[key] = { master: r === m.s.r && c === m.s.c, range: m };
+        merges.forEach((m) => {
+          for (let r = m.s.r; r <= m.e.r; r++) {
+            for (let c = m.s.c; c <= m.e.c; c++) {
+              const key = `${r}:${c}`;
+              mergeMap[key] = { master: r === m.s.r && c === m.s.c, range: m };
+            }
+          }
+        });
+
+        thead.innerHTML = "";
+        tbody.innerHTML = "";
+
+        // Render header row in tbody
+        const headerRow = document.createElement("tr");
+        headerRow.id = "table-header-row";
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+          let cell = sheet[cellAddress];
+          const td = document.createElement("td");
+          td.textContent = cell ? formatCell(cell) : "";
+          td.style.fontWeight = "bold";
+          applyCellStyle(td, cell); // Apply style to header cells
+          headerRow.appendChild(td);
+        }
+        tbody.appendChild(headerRow);
+
+        // Render data rows in tbody
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+          const tr = document.createElement("tr");
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const key = `${R}:${C}`;
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            let cell = sheet[cellAddress];
+            if (mergeMap[key] && !mergeMap[key].master) {
+              continue;
+            }
+            const td = document.createElement("td");
+            if (cell) {
+              td.textContent = formatCell(cell);
+              applyCellStyle(td, cell);
+            }
+            if (mergeMap[key]) {
+              const m = mergeMap[key].range;
+              const rowspan = m.e.r - m.s.r + 1;
+              const colspan = m.e.c - m.s.c + 1;
+              if (rowspan > 1) td.rowSpan = rowspan;
+              if (colspan > 1) td.colSpan = colspan;
+            }
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        // Set column widths based on the Excel file's `!cols` property
+        if (sheet['!cols']) {
+          const style = document.createElement('style');
+          let colStyles = '';
+          sheet['!cols'].forEach((col, index) => {
+            if (col.wpx) {
+              // Set the width in pixels if it exists in the Excel data
+              colStyles += `#previewTable th:nth-child(${index + 1}), #previewTable td:nth-child(${index + 1}) { width: ${col.wpx}px; }`;
+            }
+          });
+          style.innerHTML = colStyles;
+          document.head.appendChild(style);
+        }
+
+        previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
+        previewContainer.classList.remove("d-none");
+        searchInput.classList.remove("d-none");
+        searchInput.value = "";
       }
-    }
-  });
-
-  thead.innerHTML = "";
-  tbody.innerHTML = "";
-
-  // Render header row in tbody
-  const headerRow = document.createElement("tr");
-  headerRow.id = "table-header-row";
-  for (let C = range.s.c; C <= range.e.c; ++C) {
-    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
-    let cell = sheet[cellAddress];
-    const td = document.createElement("td");
-    // Change this line to set an empty string instead of "Column X"
-    td.textContent = cell ? formatCell(cell) : ""; 
-    td.style.fontWeight = "bold";
-    headerRow.appendChild(td);
-  }
-  tbody.appendChild(headerRow);
-
-  // Render data rows in tbody
-  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-    const tr = document.createElement("tr");
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const key = `${R}:${C}`;
-      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-      let cell = sheet[cellAddress];
-      if (mergeMap[key] && !mergeMap[key].master) {
-        continue;
-      }
-      const td = document.createElement("td");
-      if (cell) {
-        td.textContent = formatCell(cell);
-        applyCellStyle(td, cell);
-      }
-      if (mergeMap[key]) {
-        const m = mergeMap[key].range;
-        const rowspan = m.e.r - m.s.r + 1;
-        const colspan = m.e.c - m.s.c + 1;
-        if (rowspan > 1) td.rowSpan = rowspan;
-        if (colspan > 1) td.colSpan = colspan;
-      }
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-
-  previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
-  previewContainer.classList.remove("d-none");
-  searchInput.classList.remove("d-none");
-  searchInput.value = "";
-  autoFitColumns();
-}
 
       function formatCell(cell) {
         if (!cell) return "";
@@ -329,37 +341,46 @@
 
       function applyCellStyle(td, cell) {
         if (!cell || !cell.s) return;
-        if (cell.s.font && cell.s.font.color && cell.s.font.color.rgb) {
-          td.style.color = "#" + cell.s.font.color.rgb.slice(-6);
+        if (cell.s.font) {
+          if (cell.s.font.color && cell.s.font.color.rgb) {
+            td.style.color = "#" + cell.s.font.color.rgb.slice(-6);
+          }
+          if (cell.s.font.bold) td.style.fontWeight = "bold";
+          if (cell.s.font.italic) td.style.fontStyle = "italic";
         }
         if (cell.s.fill && cell.s.fill.fgColor && cell.s.fill.fgColor.rgb) {
           td.style.backgroundColor = "#" + cell.s.fill.fgColor.rgb.slice(-6);
         }
-        if (cell.s.font && cell.s.font.bold) td.style.fontWeight = "bold";
-        if (cell.s.font && cell.s.font.italic) td.style.fontStyle = "italic";
+        if (cell.s.border) {
+          const borders = cell.s.border;
+          if (borders.left && borders.left.style) td.style.borderLeftStyle = borders.left.style;
+          if (borders.right && borders.right.style) td.style.borderRightStyle = borders.right.style;
+          if (borders.top && borders.top.style) td.style.borderTopStyle = borders.top.style;
+          if (borders.bottom && borders.bottom.style) td.style.borderBottomStyle = borders.bottom.style;
+        }
       }
 
       function filterTable() {
-    const filter = searchInput.value.toLowerCase();
-    const tbody = document.querySelector("#previewTable tbody");
-    const rows = Array.from(tbody.rows); // This now includes all rows, including the header
+        const filter = searchInput.value.toLowerCase();
+        const tbody = document.querySelector("#previewTable tbody");
+        const rows = Array.from(tbody.rows);
 
-    let foundCount = 0;
-    rows.forEach((tr) => {
-        const isVisible = [...tr.cells].some((td) =>
+        let foundCount = 0;
+        rows.forEach((tr) => {
+          const isVisible = [...tr.cells].some((td) =>
             td.textContent.toLowerCase().includes(filter)
-        );
-        tr.style.display = isVisible ? "" : "none";
-        if (isVisible) {
+          );
+          tr.style.display = isVisible ? "" : "none";
+          if (isVisible) {
             foundCount++;
-        }
-    });
+          }
+        });
 
-    const headerRow = document.getElementById("table-header-row");
-    const noResultsRow = document.getElementById('no-results-row');
+        const headerRow = document.getElementById("table-header-row");
+        const noResultsRow = document.getElementById('no-results-row');
 
-    if (foundCount === 0 && filter !== "") {
-        if (!noResultsRow) {
+        if (foundCount === 0 && filter !== "") {
+          if (!noResultsRow) {
             const tr = document.createElement("tr");
             tr.id = 'no-results-row';
             const td = document.createElement("td");
@@ -368,15 +389,15 @@
             td.className = "text-center text-muted";
             tr.appendChild(td);
             tbody.appendChild(tr);
-        } else {
+          } else {
             noResultsRow.style.display = "";
-        }
-    } else {
-        if (noResultsRow) {
+          }
+        } else {
+          if (noResultsRow) {
             noResultsRow.style.display = "none";
+          }
         }
-    }
-}
+      }
 
       function sortTable(colIndex) {
         const tbody = document.querySelector("#previewTable tbody");
@@ -399,27 +420,6 @@
         rows.forEach((r) => tbody.appendChild(r));
         tbody.dataset.sortAsc = asc;
         tbody.dataset.sortCol = colIndex;
-      }
-
-      function autoFitColumns() {
-        const table = document.getElementById("previewTable");
-        if (!table || !table.rows[0]) return;
-        const colCount = table.rows[0].cells.length;
-        for (let c = 0; c < colCount; c++) {
-          let maxLen = 0;
-          for (let r = 0; r < table.rows.length; r++) {
-            const cell = table.rows[r].cells[c];
-            if (cell) {
-              const len = cell.textContent.length;
-              if (len > maxLen) maxLen = len;
-            }
-          }
-          table
-            .querySelectorAll(
-              `tr td:nth-child(${c + 1}), tr th:nth-child(${c + 1})`
-            )
-            .forEach((el) => (el.style.minWidth = `${maxLen * 8 + 20}px`));
-        }
       }
 
       function showLoading() {

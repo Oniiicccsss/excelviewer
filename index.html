@@ -1,445 +1,873 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="utf-8" />
-    <title>Excel Data Preview by Onyx</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"
-    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Spreadsheet Viewer — Onyx</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial,
-          sans-serif;
-      }
+        /* LIGHT MODE THEME */
+        :root {
+            --bg: #f5f5f5;
+            --panel: #ffffff;
+            --muted: #6b7280;
+            --text: #1f2937;
+            --accent: #10b981;
+            --cell-border: #e5e7eb;
+            --header-bg: #f5f5f5;
+            --tab-bg: #e5e7eb;
+            --tab-active-bg: #ffffff;
+            --grid-bg: #ffffff;
+        }
 
-      .drag-drop-area {
-        border: 2px dashed #ccc;
-        border-radius: 10px;
-        padding: 40px;
-        text-align: center;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-      }
+        * {
+            box-sizing: border-box
+        }
 
-      .drag-drop-area:hover {
-        background-color: #f8f9fa;
-      }
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Arial
+        }
 
-      .drag-drop-area.dragover {
-        background-color: #e9ecef;
-        border-color: #007bff;
-      }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
 
-      .card-header-custom {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
+        .wrap {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
 
-      #sheetTabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-      }
+        /* 1. Card: Main Flex container (Vertical) */
+        .card {
+            height: 100%;
+            border-radius: 0;
+            overflow: hidden;
+            border: 1px solid var(--cell-border);
+            background: var(--panel);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
 
-      #previewTable {
-	      table-layout: auto; /* Allows the table to size columns automatically */
-	      width: 100%;
-	      max-width: 100%; /* Ensures the table doesn't exceed its container */
-	      border-collapse: collapse;
-	  }
-	  
-	  #previewTable td {
-	      white-space: normal; /* This is the key for enabling word wrap */
-	      padding: 6px 10px;
-	      word-wrap: break-word; /* Prevents long words from overflowing */
-	      max-width: 250px; /* Adjust this value as needed to limit cell width */
-	  }
+        .top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid var(--cell-border);
+            min-height: 48px;
+            flex-shrink: 0;
+        }
+
+        .title {
+            font-weight: 700
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+            align-items: center
+        }
+
+        .control {
+            background: transparent;
+            border: 1px solid var(--cell-border);
+            padding: 8px 10px;
+            border-radius: 8px;
+            color: var(--text)
+        }
+
+        .search {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--cell-border)
+        }
+
+        .search input {
+            background: transparent;
+            border: 0;
+            outline: none;
+            color: var(--text);
+            width: 220px
+        }
+
+        .btn {
+            background: var(--accent);
+            color: #ffffff;
+            border: 0;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        /* 2. Sheet area takes up all remaining space (Vertical Flex) */
+        .sheet-area {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* NEW: Header row (Horizontal Flex) - Holds top-left and column labels */
+        .grid-header {
+            display: flex;
+            flex-shrink: 0;
+        }
+
+        /* NEW: Content row (Horizontal Flex) - Holds row labels and viewport */
+        .grid-content {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* 3. Top-Left Corner Box */
+        .top-left {
+            height: 36px;
+            width: 60px;
+            background: var(--header-bg);
+            border-right: 1px solid var(--cell-border);
+            border-bottom: 1px solid var(--cell-border);
+            color: var(--muted);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        /* 4. Row Labels Container (Fixed Width, Vertical Scroll) */
+        .row-labels-container {
+            width: 60px;
+            background: var(--header-bg);
+            border-right: 1px solid var(--cell-border);
+            flex-shrink: 0;
+            /* 👇 FIX 1: Ensure container fills space and lays out content vertically */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .row-labels {
+            /* This element contains the actual row numbers and needs to flex */
+            flex: 1;
+            /* 👇 FIX 2: Prevent scrollbar on row numbers themselves */
+            overflow-y: hidden;
+            flex-shrink: 0;
+        }
+
+        .row-labels-inner {
+            position: relative;
+            /* Inner content moved by JS transform */
+        }
+
+        .row-label {
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid var(--cell-border);
+            min-width: 60px;
+            padding: 6px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        /* 5. Column Labels Container (Horizontal Scroll) */
+        .col-labels-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .col-labels {
+            height: 36px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--cell-border);
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .col-labels-inner {
+            position: relative;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+
+        .col-label {
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 8px;
+            border-right: 1px solid var(--cell-border);
+            font-size: 13px;
+            color: var(--muted);
+            min-width: 0;
+        }
+
+        /* 6. Viewport / Grid */
+        .viewport {
+            flex: 1;
+            position: relative;
+            /* ✅ THIS CREATES BOTH SCROLLBARS */
+            overflow: auto;
+            background: var(--grid-bg);
+            /* min-width: 100%; and min-height: 100%; removed for stability */
+            padding-bottom: 42px;
+        }
+
+        .grid-inner {
+            position: relative;
+            /* min-width: 100%; and min-height: 100%; removed for stability */
+        }
+
+        /* cell style */
+        .cell {
+            position: absolute;
+            box-sizing: border-box;
+            border-right: 1px solid var(--cell-border);
+            border-bottom: 1px solid var(--cell-border);
+            padding: 6px 8px;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+
+            font-size: 13px;
+            cursor: default;
+            background: transparent;
+        }
+
+        .cell.merged-root {
+            border: 1px solid var(--cell-border);
+            z-index: 5;
+            white-space: normal;
+        }
+
+        .cell mark {
+            background: #fef08a;
+            color: #000;
+            font-weight: 700;
+            padding: 0;
+        }
+
+        /* FOOTER */
+        .meta {
+            display: flex;
+            padding: 0 10px;
+            color: var(--muted);
+            font-size: 13px;
+            border-top: 1px solid var(--cell-border);
+            min-height: 42px;
+            align-items: center;
+            gap: 15px;
+            background: var(--header-bg);
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        /* Sheet Tabs Styles */
+        .sheet-tabs {
+            display: flex;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            margin-right: auto;
+            z-index: 10;
+        }
+
+        .sheet-tab {
+            background: var(--tab-bg);
+            border: 1px solid var(--cell-border);
+            border-bottom: none;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            padding: 6px 12px;
+            font-size: 13px;
+            color: var(--muted);
+            cursor: pointer;
+            margin-right: 2px;
+            transition: background 0.1s;
+            transform: translateY(-1px);
+        }
+
+        .sheet-tab:hover {
+            background: #e9ecef;
+        }
+
+        .sheet-tab.active {
+            background: var(--tab-active-bg);
+            border-color: var(--cell-border);
+            color: var(--text);
+            font-weight: 600;
+            z-index: 10;
+        }
     </style>
-  </head>
-  <body class="bg-light p-4">
-    <div class="container">
-      <h2 class="mb-4 text-center">Upload & Preview Data Excel File</h2>
+</head>
 
-      <div class="card p-4 mb-4 shadow-sm">
-        <h5 class="card-title">Upload Excel/CSV File</h5>
-        <div class="drag-drop-area" id="drop-zone">
-          <p class="mb-0 text-muted">
-            Drag & drop your file here, or click to browse.
-          </p>
-          <input
-            id="fileInput"
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            class="d-none"
-          />
-        </div>
-        <small class="text-muted mt-2 text-center" id="file-info-text"
-          >Supported formats: .xlsx, .xls, .csv</small
-        >
-        <div class="mt-3" id="feedback-message"></div>
-      </div>
-
-      <div class="card shadow-sm">
-        <div class="card-header card-header-custom">
-          <h5 class="mb-0">Data Preview</h5>
-          <small class="text-muted" id="preview-file-name"></small>
-        </div>
-        <div class="card-body">
-          <ul
-            class="nav nav-tabs mb-3 d-none"
-            id="sheetTabs"
-            role="tablist"
-          ></ul>
-          <input
-            type="text"
-            id="searchInput"
-            class="form-control mb-3 d-none"
-            placeholder="Search in table..."
-          />
-          <div id="loading-spinner" class="text-center d-none">
-            <div class="spinner-border text-primary" role="status">
-              <span class="sr-only">Loading...</span>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="top">
+                <div class="title">🧾 Spreadsheet Viewer</div>
+                <div class="hint">v1.0.0</div>
+                <div class="controls">
+                    <input id="file" class="control" type="file" accept=".xlsx,.xls,.csv" />
+                    <div class="search control">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input id="query" placeholder="Search (Ctrl+/)" />
+                        <button id="clear" class="btn" style="padding:6px 8px;margin-left:8px">Clear</button>
+                    </div>
+                </div>
             </div>
-            <p class="mt-2 text-muted">Parsing file...</p>
-          </div>
-          <div class="table-responsive d-none" id="preview-container">
-            <table
-              id="previewTable"
-              class="table table-bordered table-striped"
-              style="width: 100%"
-            >
-              <thead></thead>
-              <tbody></tbody>
-            </table>
-          </div>
+
+            <div class="sheet-area">
+                <div class="grid-header">
+                    <div class="top-left">#</div>
+                    <div class="col-labels-container">
+                        <div class="col-labels">
+                            <div class="col-labels-inner" id="colLabelsInner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-content">
+                    <div class="row-labels-container">
+                        <div class="row-labels" id="rowLabels">
+                            <div class="row-labels-inner" id="rowLabelsInner"></div>
+                        </div>
+                    </div>
+
+                    <div class="viewport" id="viewport">
+                        <div class="grid-inner" id="gridInner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="meta" id="meta">
+                <div class="sheet-tabs" id="sheetTabs"></div>
+                <span id="sheetInfo">Load a file to display. Search highlights matches and filters rows.</span>
+            </div>
         </div>
-      </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
     <script>
-      let workbook = null;
+        // --- JavaScript logic is correct and unchanged ---
 
-      // DOM Element References
-      const dropZone = document.getElementById("drop-zone");
-      const fileInput = document.getElementById("fileInput");
-      const loadingSpinner = document.getElementById("loading-spinner");
-      const previewContainer = document.getElementById("preview-container");
-      const feedbackMessage = document.getElementById("feedback-message");
-      const previewFileName = document.getElementById("preview-file-name");
-      const sheetTabs = document.getElementById("sheetTabs");
-      const searchInput = document.getElementById("searchInput");
-      const tbody = document.querySelector("#previewTable tbody");
-      const thead = document.querySelector("#previewTable thead");
+        (function () {
+            const fileInput = document.getElementById('file');
+            const sheetTabs = document.getElementById('sheetTabs');
+            const sheetInfo = document.getElementById('sheetInfo');
+            const queryInput = document.getElementById('query');
+            const clearBtn = document.getElementById('clear');
+            const viewport = document.getElementById('viewport');
+            const gridInner = document.getElementById('gridInner');
+            const colLabelsInner = document.getElementById('colLabelsInner');
+            const rowLabelsInner = document.getElementById('rowLabelsInner');
 
-      // Event Listeners
-      ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
-        dropZone.addEventListener(ev, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        })
-      );
-      ["dragenter", "dragover"].forEach((ev) =>
-        dropZone.addEventListener(ev, () => dropZone.classList.add("dragover"))
-      );
-      ["dragleave", "drop"].forEach((ev) =>
-        dropZone.addEventListener(ev, () => dropZone.classList.remove("dragover"))
-      );
+            let workbook = null;
+            let sheetData = [];
+            let currentSheetName = null;
 
-      dropZone.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
-      dropZone.addEventListener("click", () => fileInput.click());
-      fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
-      searchInput.onkeyup = () => filterTable();
+            let colWidths = [];
+            let rowHeights = [];
 
-      // Core Functions
-      async function handleFiles(files) {
-        const file = files[0];
-        if (!file) return;
+            const DEFAULT_COL_WIDTH = 100;
+            const CHAR_WIDTH_MULTIPLIER = 7.5;
+            const HORIZONTAL_PADDING = 16;
+            const DEFAULT_ROW_HEIGHT = 30;
 
-        if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
-          showFeedback("Please upload an Excel or CSV file.", "danger");
-          return;
-        }
+            const rendered = new Map();
+            let searchQuery = '';
 
-        showLoading();
-        try {
-          const data = await file.arrayBuffer();
-          workbook = XLSX.read(data, {
-            type: "array",
-            cellDates: true,
-            cellNF: true,
-            cellText: false,
-          });
+            // --- Helper Functions ---
 
-          if (workbook.SheetNames.length > 0) {
-            renderSheetTabs(workbook.SheetNames, file.name);
-            renderTable(
-              workbook.Sheets[workbook.SheetNames[0]],
-              workbook.SheetNames[0],
-              file.name
-            );
-            showFeedback(
-              "File parsed successfully. Select a sheet to view.",
-              "success"
-            );
-          } else {
-            showFeedback("The uploaded file is empty.", "warning");
-            hidePreview();
-          }
-        } catch (err) {
-          console.error(err);
-          showFeedback("Error parsing the file.", "danger");
-          hidePreview();
-        } finally {
-          hideLoading();
-        }
-      }
+            const toA1 = (c) => {
+                let s = ''; c++;
+                while (c > 0) { const rem = (c - 1) % 26; s = String.fromCharCode(65 + rem) + s; c = Math.floor((c - 1) / 26); }
+                return s;
+            };
 
-      function renderSheetTabs(sheetNames, fileName) {
-        sheetTabs.innerHTML = "";
-        sheetTabs.classList.remove("d-none");
+            const escapeHtml = (s) => String(s).replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));
 
-        sheetNames.forEach((sheetName, idx) => {
-          const li = document.createElement("li");
-          li.className = "nav-item";
+            const readWorkbook = (data, type) => {
+                try {
+                    return XLSX.read(data, { type, cellDates: true });
+                } catch (e) { console.error(e); alert('Unable to parse file.'); return null; }
+            };
 
-          const a = document.createElement("a");
-          a.className = "nav-link" + (idx === 0 ? " active" : "");
-          a.href = "#";
-          a.textContent = sheetName;
-          a.onclick = (e) => {
-            e.preventDefault();
-            document
-              .querySelectorAll("#sheetTabs .nav-link")
-              .forEach((el) => el.classList.remove("active"));
-            a.classList.add("active");
-            renderTable(
-              workbook.Sheets[sheetName],
-              sheetName,
-              fileName
-            );
-          };
+            // Simplified Text Measurement based on character length
+            const measureTextWidth = (text) => {
+                const length = String(text || '').length;
+                return Math.max(DEFAULT_COL_WIDTH, length * CHAR_WIDTH_MULTIPLIER + HORIZONTAL_PADDING);
+            };
 
-          li.appendChild(a);
-          sheetTabs.appendChild(li);
-        });
-      }
+            // Calculate total width of a merged column block
+            const getMergedWidth = (startCol, span) => {
+                let width = 0;
+                for (let i = 0; i < span; i++) {
+                    width += colWidths[startCol + i] || DEFAULT_COL_WIDTH;
+                }
+                return width;
+            };
 
-      function renderTable(sheet, sheetName, fileName) {
-        const range = XLSX.utils.decode_range(sheet["!ref"]);
-        const merges = sheet["!merges"] || [];
-        const mergeMap = {};
+            // Calculate total height of a merged row block
+            const getMergedHeight = (startRow, span) => {
+                let height = 0;
+                for (let i = 0; i < span; i++) {
+                    height += rowHeights[startRow + i] || DEFAULT_ROW_HEIGHT;
+                }
+                return height;
+            };
 
-        merges.forEach((m) => {
-          for (let r = m.s.r; r <= m.e.r; r++) {
-            for (let c = m.s.c; c <= m.e.c; c++) {
-              const key = `${r}:${c}`;
-              mergeMap[key] = { master: r === m.s.r && c === m.s.c, range: m };
+            // Calculate X offset for a column (the cumulative width up to that column)
+            const getColXOffset = (col) => {
+                let offset = 0;
+                for (let i = 0; i < col; i++) {
+                    offset += colWidths[i] || DEFAULT_COL_WIDTH;
+                }
+                return offset;
+            };
+
+            // Calculate Y offset for a row
+            const getRowYOffset = (row) => {
+                let offset = 0;
+                for (let i = 0; i < row; i++) {
+                    offset += rowHeights[i] || DEFAULT_ROW_HEIGHT;
+                }
+                return offset;
+            };
+
+            /**
+             * Calculates the visible column range (start and end indices) based on scroll position 
+             * and dynamic column widths. This fixes the horizontal scrolling virtualization bug.
+             */
+            const getVisibleRange = (scrollPos, widths, defaultWidth) => {
+                let currentOffset = 0;
+                let visibleStartIdx = 0;
+
+                // 1. Find the starting column (visibleStartIdx)
+                for (let i = 0; i < widths.length; i++) {
+                    const width = widths[i] || defaultWidth;
+                    // If the scroll position is past the start of this column, this isn't our starting column yet
+                    if (currentOffset + width <= scrollPos) {
+                        visibleStartIdx = i + 1;
+                    } else {
+                        // We found the column where the scroll position lands
+                        break;
+                    }
+                    currentOffset += width;
+                }
+
+                // 2. Determine the end column (visibleEndIdx)
+                currentOffset = getColXOffset(visibleStartIdx); // Start offset from the beginning of the visible column
+                let endIdx = visibleStartIdx;
+                const scrollEnd = scrollPos + viewport.clientWidth;
+
+                // Iterate forward until the cumulative width exceeds the viewport's right edge
+                while (currentOffset < scrollEnd && endIdx < widths.length) {
+                    currentOffset += (widths[endIdx] || defaultWidth);
+                    endIdx++;
+                }
+
+                return { start: visibleStartIdx, end: endIdx };
+            };
+
+
+            // Sheet to 2D array conversion logic (with auto-width calculation)
+            function sheetTo2D(sheet) {
+                if (!sheet) return [];
+
+                let range;
+                if (sheet['!ref']) {
+                    range = XLSX.utils.decode_range(sheet['!ref']);
+                } else {
+                    const addrs = Object.keys(sheet).filter(k => k[0] !== '!');
+                    if (addrs.length === 0) return [[]];
+                    let minR = Infinity, minC = Infinity, maxR = 0, maxC = 0;
+                    addrs.forEach(a => {
+                        const rc = XLSX.utils.decode_cell(a);
+                        if (rc.r < minR) minR = rc.r;
+                        if (rc.c < minC) minC = rc.c;
+                        if (rc.r > maxR) maxR = rc.r;
+                        if (rc.c > maxC) maxC = rc.c;
+                    });
+                    range = { s: { r: minR, c: minC }, e: { r: maxR, c: maxC } };
+                }
+
+                const rows = [];
+                const rowsCount = range.e.r - range.s.r + 1;
+                const colsCount = range.e.c - range.s.c + 1;
+                let maxContentWidths = new Array(colsCount).fill(0);
+
+                for (let r = 0; r < rowsCount; r++) {
+                    const row = new Array(colsCount).fill(null).map(() => ({ value: '', meta: { merged: 'none' } }));
+                    rows.push(row);
+                }
+
+                // 1. Process cells and calculate max content width per column
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        const cell = sheet[addr];
+                        let val = '';
+                        if (cell !== undefined) {
+                            if (cell.w !== undefined && cell.w !== null) {
+                                val = String(cell.w);
+                            } else if (cell.v !== undefined && cell.v !== null) {
+                                if (cell.t === 'b') val = cell.v ? 'TRUE' : 'FALSE';
+                                else if (cell.t === 'd') val = (cell.w !== undefined) ? String(cell.w) : (new Date(cell.v)).toISOString();
+                                else val = String(cell.v);
+                            }
+                        }
+
+                        const relC = c - range.s.c;
+                        const relR = r - range.s.r;
+
+                        rows[relR][relC].value = val;
+
+                        // Track max content length for auto-width calculation
+                        maxContentWidths[relC] = Math.max(maxContentWidths[relC], measureTextWidth(val));
+                    }
+                }
+
+                // 2. Set dimensions:
+                colWidths = maxContentWidths; // Use calculated widths
+
+                rowHeights = []; // Resetting for dynamic setting based on file or default
+                if (sheet['!rows']) {
+                    sheet['!rows'].forEach((row, i) => {
+                        rowHeights[i] = row.hpx || (row.hpt ? row.hpt / 0.75 : DEFAULT_ROW_HEIGHT);
+                    });
+                }
+
+
+                // 3. Process merges
+                const merges = sheet['!merges'] || [];
+                merges.forEach(m => {
+                    const rS = m.s.r - range.s.r;
+                    const cS = m.s.c - range.s.c;
+                    const rE = m.e.r - range.s.r;
+                    const cE = m.e.c - range.s.c;
+
+                    const rowSpan = rE - rS + 1;
+                    const colSpan = cE - cS + 1;
+
+                    // Mark the root cell
+                    if (rows[rS] && rows[rS][cS]) {
+                        rows[rS][cS].meta = {
+                            merged: 'root',
+                            rows: rowSpan,
+                            cols: colSpan
+                        };
+                    }
+
+                    // Mark the rest of the cells as 'skip'
+                    for (let rr = rS; rr <= rE; rr++) {
+                        for (let cc = cS; cc <= cE; cc++) {
+                            if (rr === rS && cc === cS) continue; // Skip root
+                            if (rows[rr] && rows[rr][cc]) {
+                                rows[rr][cc].meta = { merged: 'skip' };
+                            }
+                        }
+                    }
+                });
+
+                return rows;
             }
-          }
-        });
 
-        thead.innerHTML = "";
-        tbody.innerHTML = "";
+            // Populate labels and virtual container size
+            const layoutSheet = () => {
+                const rows = sheetData.length;
+                const cols = sheetData[0] ? sheetData[0].length : 0;
 
-        const headerRow = document.createElement("tr");
-        headerRow.id = "table-header-row";
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C });
-          let cell = sheet[cellAddress];
-          const td = document.createElement("td");
-          td.textContent = cell ? formatCell(cell) : "";
-          td.style.fontWeight = "bold";
-          applyCellStyle(td, cell);
-          headerRow.appendChild(td);
-        }
-        tbody.appendChild(headerRow);
+                const innerWidth = getColXOffset(cols);
+                const innerHeight = getRowYOffset(rows);
 
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-          const tr = document.createElement("tr");
-          for (let C = range.s.c; C <= range.e.c; ++C) {
-            const key = `${R}:${C}`;
-            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-            let cell = sheet[cellAddress];
-            if (mergeMap[key] && !mergeMap[key].master) {
-              continue;
-            }
-            const td = document.createElement("td");
-            if (cell) {
-              td.textContent = formatCell(cell);
-              applyCellStyle(td, cell);
-            }
-            if (mergeMap[key]) {
-              const m = mergeMap[key].range;
-              const rowspan = m.e.r - m.s.r + 1;
-              const colspan = m.e.c - m.s.c + 1;
-              if (rowspan > 1) td.rowSpan = rowspan;
-              if (colspan > 1) td.colSpan = colspan;
-            }
-            tr.appendChild(td);
-          }
-          tbody.appendChild(tr);
-        }
+                // Set the size of the virtual grid. 
+                gridInner.style.width = Math.max(innerWidth, viewport.clientWidth) + 'px';
+                // Use the greater of content height or viewport height to ensure the grid is at least full screen height
+                gridInner.style.height = Math.max(innerHeight, viewport.clientHeight - 42) + 'px';
 
-        // Keep this to apply widths, but they won't force no-wrap
-        if (sheet['!cols']) {
-          const style = document.createElement('style');
-          let colStyles = '';
-          sheet['!cols'].forEach((col, index) => {
-            if (col.wpx) {
-              colStyles += `#previewTable th:nth-child(${index + 1}), #previewTable td:nth-child(${index + 1}) { width: ${col.wpx}px; }`;
-            }
-          });
-          style.innerHTML = colStyles;
-          document.head.appendChild(style);
-        }
+                // column labels
+                colLabelsInner.style.width = innerWidth + 'px';
+                colLabelsInner.innerHTML = '';
+                for (let c = 0; c < cols; c++) {
+                    const colWidth = colWidths[c] || DEFAULT_COL_WIDTH;
+                    const div = document.createElement('div');
+                    div.className = 'col-label';
+                    div.style.minWidth = colWidth + 'px';
+                    div.style.width = colWidth + 'px';
+                    div.textContent = toA1(c);
+                    colLabelsInner.appendChild(div);
+                }
 
-        previewFileName.textContent = `File: ${fileName} - Sheet: ${sheetName}`;
-        previewContainer.classList.remove("d-none");
-        searchInput.classList.remove("d-none");
-        searchInput.value = "";
-      }
+                // row labels
+                rowLabelsInner.style.height = innerHeight + 'px';
+                rowLabelsInner.innerHTML = '';
+                for (let r = 0; r < rows; r++) {
+                    const rowHeight = rowHeights[r] || DEFAULT_ROW_HEIGHT;
+                    const div = document.createElement('div');
+                    div.className = 'row-label';
+                    div.style.height = rowHeight + 'px';
+                    div.style.lineHeight = (rowHeight - 6) + 'px';
+                    div.textContent = (r + 1);
+                    rowLabelsInner.appendChild(div);
+                }
 
-      function formatCell(cell) {
-        if (!cell) return "";
-        if (cell.t === "d" && cell.v instanceof Date) {
-          const d = cell.v;
-          if (d.getFullYear() <= 1900) return d.toLocaleTimeString();
-          if (d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0)
-            return d.toLocaleDateString();
-          return d.toLocaleString();
-        }
-        if (cell.t === "n") {
-          if (cell.z && /[ymdhs]/i.test(cell.z)) {
-            const dateObj = XLSX.SSF.parse_date_code(cell.v);
-            if (dateObj) {
-              const jsDate = new Date(
-                Date.UTC(
-                  dateObj.y || 1900,
-                  (dateObj.m || 1) - 1,
-                  dateObj.d || 1,
-                  dateObj.H,
-                  dateObj.M,
-                  dateObj.S
-                )
-              );
-              if (!dateObj.y && !dateObj.m && !dateObj.d)
-                return jsDate.toLocaleTimeString();
-              if (dateObj.H === 0 && dateObj.M === 0 && dateObj.S === 0)
-                return jsDate.toLocaleDateString();
-              return jsDate.toLocaleString();
-            }
-          }
-          return Number(cell.v).toFixed(2);
-        }
-        return cell.w || cell.v || "";
-      }
+                sheetInfo.textContent = `${rows.toLocaleString()} rows × ${cols.toLocaleString()} cols`;
 
-      function applyCellStyle(td, cell) {
-        if (!cell || !cell.s) return;
-        if (cell.s.font) {
-          if (cell.s.font.color && cell.s.font.color.rgb) {
-            td.style.color = "#" + cell.s.font.color.rgb.slice(-6);
-          }
-          if (cell.s.font.bold) td.style.fontWeight = "bold";
-          if (cell.s.font.italic) td.style.fontStyle = "italic";
-        }
-        if (cell.s.fill && cell.s.fill.fgColor && cell.s.fill.fgColor.rgb) {
-          td.style.backgroundColor = "#" + cell.s.fill.fgColor.rgb.slice(-6);
-        }
-        if (cell.s.border) {
-          const borders = cell.s.border;
-          if (borders.left && borders.left.style) td.style.borderLeftStyle = borders.left.style;
-          if (borders.right && borders.right.style) td.style.borderRightStyle = borders.right.style;
-          if (borders.top && borders.top.style) td.style.borderTopStyle = borders.top.style;
-          if (borders.bottom && borders.bottom.style) td.style.borderBottomStyle = borders.bottom.style;
-        }
-      }
+                rendered.forEach((node) => node.remove());
+                rendered.clear();
 
-      function filterTable() {
-        const filter = searchInput.value.toLowerCase();
-        const tbody = document.querySelector("#previewTable tbody");
-        const rows = Array.from(tbody.rows);
+                onScroll();
+            };
 
-        let foundCount = 0;
-        rows.forEach((tr) => {
-          const isVisible = [...tr.cells].some((td) =>
-            td.textContent.toLowerCase().includes(filter)
-          );
-          tr.style.display = isVisible ? "" : "none";
-          if (isVisible) {
-            foundCount++;
-          }
-        });
+            // compute visible range and render cells
+            const onScroll = () => {
+                const sx = viewport.scrollLeft;
+                const sy = viewport.scrollTop;
+                const vw = viewport.clientWidth;
+                const vh = viewport.clientHeight;
 
-        const headerRow = document.getElementById("table-header-row");
-        const noResultsRow = document.getElementById('no-results-row');
+                // Keep labels aligned by applying the scroll offset as a transform
+                colLabelsInner.style.transform = `translateX(${-sx}px)`;
+                rowLabelsInner.style.transform = `translateY(${-sy}px)`;
 
-        if (foundCount === 0 && filter !== "") {
-          if (!noResultsRow) {
-            const tr = document.createElement("tr");
-            tr.id = 'no-results-row';
-            const td = document.createElement("td");
-            td.colSpan = tbody.rows[0].cells.length;
-            td.textContent = "No results found.";
-            td.className = "text-center text-muted";
-            tr.appendChild(td);
-            tbody.appendChild(tr);
-          } else {
-            noResultsRow.style.display = "";
-          }
-        } else {
-          if (noResultsRow) {
-            noResultsRow.style.display = "none";
-          }
-        }
-      }
+                // 1. Vertical Range (still relies on default height for approximation)
+                const startRow = Math.max(0, Math.floor(sy / DEFAULT_ROW_HEIGHT) - 2);
+                const endRow = Math.min(sheetData.length, Math.ceil((sy + vh) / DEFAULT_ROW_HEIGHT) + 2);
 
-      function sortTable(colIndex) {
-        const tbody = document.querySelector("#previewTable tbody");
-        const rows = Array.from(tbody.rows).slice(1);
-        const headerRow = document.getElementById("table-header-row");
-        const asc = !tbody.dataset.sortAsc || tbody.dataset.sortCol != colIndex;
+                // 2. Horizontal Range (uses dynamic column widths)
+                const { start: visibleColStart, end: visibleColEnd } = getVisibleRange(sx, colWidths, DEFAULT_COL_WIDTH);
 
-        rows.sort((a, b) =>
-          a.cells[colIndex].textContent.localeCompare(
-            b.cells[colIndex].textContent,
-            undefined,
-            { numeric: true }
-          )
-        );
+                // Add a small buffer of 2 columns
+                const startCol = Math.max(0, visibleColStart - 2);
+                const endCol = Math.min(sheetData[0] ? sheetData[0].length : 0, visibleColEnd + 2);
 
-        if (!asc) rows.reverse();
 
-        tbody.innerHTML = "";
-        tbody.appendChild(headerRow);
-        rows.forEach((r) => tbody.appendChild(r));
-        tbody.dataset.sortAsc = asc;
-        tbody.dataset.sortCol = colIndex;
-      }
+                const keysToRemove = [];
+                for (const key of rendered.keys()) {
+                    const [r, c] = key.split(',').map(x => parseInt(x, 10));
+                    // Check if cell is outside the calculated visible range
+                    if (r < startRow || r > endRow || c < startCol || c > endCol) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(k => { const n = rendered.get(k); if (n) n.remove(); rendered.delete(k); });
 
-      function showLoading() {
-        loadingSpinner.classList.remove("d-none");
-      }
+                for (let r = startRow; r < endRow; r++) {
+                    // Check if row contains the search term and skip rendering if it doesn't
+                    if (searchQuery) {
+                        const rowText = (sheetData[r] || []).map(d => d.value).join('').toLowerCase();
+                        if (!rowText.includes(searchQuery)) {
+                            continue;
+                        }
+                    }
 
-      function hideLoading() {
-        loadingSpinner.classList.add("d-none");
-      }
+                    for (let c = startCol; c < endCol; c++) {
+                        const key = r + ',' + c;
+                        const cellData = (sheetData[r] && sheetData[r][c]) ? sheetData[r][c] : null;
 
-      function hidePreview() {
-        previewContainer.classList.add("d-none");
-        sheetTabs.classList.add("d-none");
-        previewFileName.textContent = "";
-        searchInput.classList.add("d-none");
-      }
+                        if (!cellData || cellData.meta.merged === 'skip') {
+                            const n = rendered.get(key);
+                            if (n) n.remove();
+                            rendered.delete(key);
+                            continue;
+                        }
 
-      function showFeedback(msg, type) {
-        feedbackMessage.innerHTML = `<div class="alert alert-${type} mb-0">${msg}</div>`;
-      }
+                        if (rendered.has(key)) continue;
+
+                        const val = cellData.value || '';
+                        const isMergedRoot = cellData.meta.merged === 'root';
+                        const colSpan = isMergedRoot ? cellData.meta.cols : 1;
+                        const rowSpan = isMergedRoot ? cellData.meta.rows : 1;
+
+                        const div = document.createElement('div');
+                        div.className = 'cell' + (isMergedRoot ? ' merged-root' : '');
+
+                        const x = getColXOffset(c);
+                        const y = getRowYOffset(r);
+                        const width = isMergedRoot ? getMergedWidth(c, colSpan) : (colWidths[c] || DEFAULT_COL_WIDTH);
+                        const height = isMergedRoot ? getMergedHeight(r, rowSpan) : (rowHeights[r] || DEFAULT_ROW_HEIGHT);
+
+                        div.style.left = x + 'px';
+                        div.style.top = y + 'px';
+                        div.style.width = width + 'px';
+                        div.style.height = height + 'px';
+                        div.dataset.r = r; div.dataset.c = c;
+
+                        if (searchQuery) {
+                            const valStr = String(val);
+                            const idx = valStr.toLowerCase().indexOf(searchQuery);
+                            if (idx !== -1) {
+                                const before = escapeHtml(valStr.slice(0, idx));
+                                const mid = escapeHtml(valStr.slice(idx, idx + searchQuery.length));
+                                const after = escapeHtml(valStr.slice(idx + searchQuery.length));
+                                div.innerHTML = before + '<mark>' + mid + '</mark>' + after;
+                            } else {
+                                div.textContent = valStr;
+                            }
+                        } else {
+                            div.textContent = val;
+                        }
+
+                        gridInner.appendChild(div);
+                        rendered.set(key, div);
+                    }
+                }
+            };
+
+            // Scrolls the viewport to the first row that matches the search query.
+            const jumpToFirstMatch = (query) => {
+                if (!query) return;
+
+                const searchLower = query.toLowerCase();
+                let firstMatchRow = -1;
+
+                // Find the first row index that contains the search query
+                for (let r = 0; r < sheetData.length; r++) {
+                    const rowText = (sheetData[r] || []).map(d => d.value).join('').toLowerCase();
+                    if (rowText.includes(searchLower)) {
+                        firstMatchRow = r;
+                        break;
+                    }
+                }
+
+                if (firstMatchRow !== -1) {
+                    // Calculate the Y-offset (scroll position) for this row
+                    const yOffset = getRowYOffset(firstMatchRow);
+
+                    // Set the viewport's scroll position
+                    viewport.scrollTop = yOffset;
+                }
+            };
+
+
+            // --- Event Handlers and Main Logic ---
+
+            let scrollTimeout = null;
+            viewport.addEventListener('scroll', () => {
+                if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+                scrollTimeout = requestAnimationFrame(onScroll);
+            });
+
+            // Search input handler to include the jump logic
+            queryInput.addEventListener('input', () => {
+                searchQuery = queryInput.value.trim().toLowerCase();
+                rendered.forEach(n => n.remove()); rendered.clear();
+
+                // 1. Re-render the cells to apply highlights/filters
+                onScroll();
+
+                // 2. Jump the viewport to the first result
+                jumpToFirstMatch(searchQuery);
+            });
+
+            clearBtn.addEventListener('click', () => {
+                queryInput.value = '';
+                searchQuery = '';
+                rendered.forEach(n => n.remove());
+                rendered.clear();
+                onScroll();
+                // Reset scroll to top-left on clear
+                viewport.scrollLeft = 0;
+                viewport.scrollTop = 0;
+                queryInput.focus();
+            });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === '/') {
+                    e.preventDefault();
+                    queryInput.focus();
+                }
+            });
+
+            sheetTabs.addEventListener('click', (e) => {
+                if (e.target.classList.contains('sheet-tab')) {
+                    const newSheetName = e.target.dataset.sheetName;
+                    if (newSheetName !== currentSheetName) {
+                        currentSheetName = newSheetName;
+                        loadSheet(currentSheetName);
+                        Array.from(sheetTabs.children).forEach(tab => {
+                            tab.classList.remove('active');
+                        });
+                        e.target.classList.add('active');
+                    }
+                }
+            });
+
+            fileInput.addEventListener('change', (ev) => {
+                const f = ev.target.files && ev.target.files[0]; if (!f) return;
+                const isText = /\.(csv|tsv|txt)$/i.test(f.name);
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const data = reader.result;
+                    workbook = isText ? readWorkbook(typeof data === 'string' ? data : new TextDecoder().decode(data), 'string') : readWorkbook(data, 'array');
+                    if (!workbook) return;
+                    const names = workbook.SheetNames || [];
+
+                    sheetTabs.innerHTML = '';
+                    names.forEach((n) => {
+                        const btn = document.createElement('button');
+                        btn.className = 'sheet-tab';
+                        btn.dataset.sheetName = n;
+                        btn.textContent = n;
+                        sheetTabs.appendChild(btn);
+                    });
+
+                    currentSheetName = names[0];
+                    loadSheet(currentSheetName);
+                    if (sheetTabs.firstChild) {
+                        sheetTabs.firstChild.classList.add('active');
+                    }
+                };
+                if (isText) reader.readAsText(f); else reader.readAsArrayBuffer(f);
+            });
+
+            const loadSheet = (name) => {
+                const ws = workbook.Sheets[name]; if (!ws) return;
+                sheetData = sheetTo2D(ws);
+                layoutSheet();
+                viewport.scrollLeft = 0; viewport.scrollTop = 0;
+            };
+
+            // Recalculate layout on viewport resize (to fix scrolling if size changes)
+            window.addEventListener('resize', () => {
+                if (workbook) layoutSheet();
+            });
+
+        })();
     </script>
-  </body>
+</body>
+
 </html>
